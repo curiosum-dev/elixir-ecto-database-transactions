@@ -3,9 +3,9 @@ defmodule TransactApp.Bank.Account do
   import Ecto.Changeset
 
   schema "accounts" do
-    field(:balance, :integer)
+    field :balance, :decimal
 
-    has_many(:activities, TransactApp.Bank.Activity)
+    has_many :activities, TransactApp.Bank.Activity
 
     timestamps()
   end

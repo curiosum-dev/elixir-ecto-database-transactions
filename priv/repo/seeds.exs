@@ -11,6 +11,7 @@
 # and so on) as they will fail if something goes wrong.
 
 alias TransactApp.Bank
+alias TransactApp.Orders
 alias TransactApp.Repo
 
 [100, 200, 300, 400]
@@ -23,4 +24,19 @@ alias TransactApp.Repo
     |> Ecto.build_assoc(:activities, %{description: "Account interaction"})
     |> Repo.insert!()
   end)
+end)
+
+accounts = Repo.all(Bank.Account)
+
+accounts
+|> then(&for x <- &1, y <- &1, do: {x, y})
+|> Enum.reject(fn {a, b} -> a == b end)
+|> Enum.each(fn {acc1, acc2} ->
+  Orders.create_order(%{
+    ordering_account_id: acc1.id,
+    selling_account_id: acc2.id,
+    line_items: [
+      %{name: "Test order #{acc1.id} - #{acc2.id}", price: 10.50}
+    ]
+  })
 end)

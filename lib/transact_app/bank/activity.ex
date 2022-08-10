@@ -3,9 +3,9 @@ defmodule TransactApp.Bank.Activity do
   import Ecto.Changeset
 
   schema "activities" do
-    field(:description, :string)
+    field :description, :string
 
-    belongs_to(:account, TransactApp.Bank.Account)
+    belongs_to :account, TransactApp.Bank.Account
 
     timestamps()
   end
@@ -13,8 +13,7 @@ defmodule TransactApp.Bank.Activity do
   @doc false
   def changeset(account, attrs) do
     account
-    |> cast(attrs, [:balance])
-    |> validate_required([:balance])
-    |> validate_number(:balance, greater_than_or_equal_to: 0)
+    |> cast(attrs, [:description])
+    |> validate_required([:description])
   end
 end

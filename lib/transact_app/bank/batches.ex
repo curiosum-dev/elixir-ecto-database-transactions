@@ -1,42 +1,49 @@
 defmodule TransactApp.Bank.Batches do
+  # Ecto.Multi batch definitions for the Bank context
+
   alias Ecto.Multi
   alias TransactApp.Bank.Account
-  import Ecto.Query, only: [from: 2]
+  alias TransactApp.Bank.AccountQueries
 
-  def transfer_money(acc1_id, acc2_id, amount) do
-    Multi.new()
-    |> Multi.run(:retrieve_accounts_step, retrieve_accounts(acc1_id, acc2_id))
-    |> Multi.run(:verify_balances_step, verify_balances(amount))
-    |> Multi.run(:subtract_from_a_step, &subtract_from_a/2)
-    |> Multi.run(:add_to_b_step, &add_to_b/2)
+  # It's handy to have the first argument default to Multi.new()
+  # - this way such a batch definition will be fully composable
+  # with others.
+  def transfer_money(multi \\ Multi.new(), account_id_1, account_id_2, amount) do
+    multi
+    |> Multi.all(
+      :retrieve_accounts_step,
+      AccountQueries.account_by_ids([account_id_1, account_id_2])
+    )
+    |> run_verify_balances_step(amount)
+    |> Multi.update(:subtract_from_acc_1_step, &subtract_from_acc_1_step/1)
+    |> Multi.update(:add_to_acc_2_step, &add_to_acc_2_step/1)
   end
 
-  defp retrieve_accounts(acc1_id, acc2_id) do
-    fn repo, _ ->
-      case from(acc in Account, where: acc.id in [^acc1_id, ^acc2_id]) |> repo.all() do
-        [acc_a, acc_b] -> {:ok, {acc_a, acc_b}}
-        _ -> {:error, :account_not_found}
+  defp run_verify_balances_step(multi, amount) do
+    Multi.run(
+      multi,
+      :verify_balances_step,
+      fn _repo, %{retrieve_accounts_step: [acc_1, _]} ->
+        if Decimal.compare(acc_1.balance, amount) == :lt,
+          do: {:error, :balance_too_low},
+          else: {:ok, amount}
       end
-    end
+    )
   end
 
-  defp verify_balances(transfer_amount) do
-    fn _repo, %{retrieve_accounts_step: {acc_a, acc_b}} ->
-      if acc_a.balance < transfer_amount,
-        do: {:error, :balance_too_low},
-        else: {:ok, {acc_a, acc_b, transfer_amount}}
-    end
+  defp subtract_from_acc_1_step(changes) do
+    %{
+      retrieve_accounts_step: [acc_1, _],
+      verify_balances_step: verified_amount
+    } = changes
+
+    Account.changeset(acc_1, %{balance: Decimal.sub(acc_1.balance, verified_amount)})
   end
 
-  defp subtract_from_a(repo, %{verify_balances_step: {acc_a, _, verified_amount}}) do
-    acc_a
-    |> Account.changeset(%{balance: acc_a.balance - verified_amount})
-    |> repo.update()
-  end
-
-  defp add_to_b(repo, %{verify_balances_step: {_, acc_b, verified_amount}}) do
-    acc_b
-    |> Account.changeset(%{balance: acc_b.balance + verified_amount})
-    |> repo.update()
+  defp add_to_acc_2_step(%{
+         retrieve_accounts_step: [_, acc_2],
+         verify_balances_step: verified_amount
+       }) do
+    Account.changeset(acc_2, %{balance: Decimal.add(acc_2.balance, verified_amount)})
   end
 end
